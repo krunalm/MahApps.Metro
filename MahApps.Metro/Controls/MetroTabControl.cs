@@ -1,49 +1,35 @@
 ﻿using System;
 using System.Collections;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
 
 namespace MahApps.Metro.Controls
 {
+    /// <summary>
+    /// A standard MetroTabControl (Pivot).
+    /// </summary>
     public class MetroTabControl : BaseMetroTabControl
     {
+        /// <summary>
+        /// Initializes a new instance of the MahApps.Metro.Controls.MetroTabControl class.
+        /// </summary>
         public MetroTabControl()
-            : base()
         {
             DefaultStyleKey = typeof(MetroTabControl);
         }
     }
 
+    /// <summary>
+    /// A base class for every MetroTabControl (Pivot).
+    /// </summary>
     public abstract class BaseMetroTabControl : TabControl
     {
         public BaseMetroTabControl()
         {
             InternalCloseTabCommand = new DefaultCloseTabCommand(this);
-
-            this.Loaded += BaseMetroTabControl_Loaded;
-            this.Unloaded += BaseMetroTabControl_Unloaded;
-        }
-
-        void BaseMetroTabControl_Unloaded(object sender, RoutedEventArgs e)
-        {
-            this.Loaded -= BaseMetroTabControl_Loaded;
-            this.Unloaded -= BaseMetroTabControl_Unloaded;
-        }
-
-        void BaseMetroTabControl_Loaded(object sender, RoutedEventArgs e)
-        {
-            this.Loaded += BaseMetroTabControl_Loaded;
-
-            //Ensure each tabitem knows what the owning tab is.
-
-            if (ItemsSource == null)
-                foreach (TabItem item in Items)
-                    if (item is MetroTabItem)
-                        ((MetroTabItem)item).OwningTabControl = this;
-
         }
 
         public Thickness TabStripMargin
@@ -63,17 +49,20 @@ namespace MahApps.Metro.Controls
 
         protected override DependencyObject GetContainerForItemOverride()
         {
-            return new MetroTabItem() { OwningTabControl = this }; //Overrides the TabControl's default behavior and returns a MetroTabItem instead of a regular one.
+            return new MetroTabItem(); //Overrides the TabControl's default behavior and returns a MetroTabItem instead of a regular one.
         }
 
         protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
         {
             if (element != item)
-                element.SetCurrentValue(MetroTabItem.DataContextProperty, item); //dont want to set the datacontext to itself.
+                element.SetCurrentValue(DataContextProperty, item); //dont want to set the datacontext to itself.
 
             base.PrepareContainerForItemOverride(element, item);
         }
 
+        /// <summary>
+        /// Get/sets the command that executes when a MetroTabItem's close button is clicked.
+        /// </summary>
         public ICommand CloseTabCommand
         {
             get { return (ICommand)GetValue(CloseTabCommandProperty); }
@@ -94,6 +83,9 @@ namespace MahApps.Metro.Controls
 
 
         public delegate void TabItemClosingEventHandler(object sender, TabItemClosingEventArgs e);
+        /// <summary>
+        /// An event that is raised when a TabItem is closed.
+        /// </summary>
         public event TabItemClosingEventHandler TabItemClosingEvent;
 
         internal bool RaiseTabItemClosingEvent(MetroTabItem closingItem)
@@ -102,7 +94,7 @@ namespace MahApps.Metro.Controls
             {
                 foreach (TabItemClosingEventHandler subHandler in TabItemClosingEvent.GetInvocationList())
                 {
-                    TabItemClosingEventArgs args = new TabItemClosingEventArgs(closingItem);
+                    var args = new TabItemClosingEventArgs(closingItem);
                     subHandler.Invoke(this, args);
                     if (args.Cancel)
                         return true;
@@ -112,6 +104,9 @@ namespace MahApps.Metro.Controls
             return false;
         }
 
+        /// <summary>
+        /// Event args that is created when a TabItem is closed.
+        /// </summary>
         public class TabItemClosingEventArgs : CancelEventArgs
         {
             internal TabItemClosingEventArgs(MetroTabItem item)
@@ -119,12 +114,15 @@ namespace MahApps.Metro.Controls
                 ClosingTabItem = item;
             }
 
+            /// <summary>
+            /// Gets the MetroTabItem that will be closed.
+            /// </summary>
             public MetroTabItem ClosingTabItem { get; private set; }
         }
 
         internal class DefaultCloseTabCommand : ICommand
         {
-            private BaseMetroTabControl owner = null;
+            private readonly BaseMetroTabControl owner;
             internal DefaultCloseTabCommand(BaseMetroTabControl Owner)
             {
                 owner = Owner;
@@ -135,13 +133,15 @@ namespace MahApps.Metro.Controls
                 return true;
             }
 
-            public event System.EventHandler CanExecuteChanged;
+#pragma warning disable 67
+            public event EventHandler CanExecuteChanged;
+#pragma warning restore 67
 
             public void Execute(object parameter)
             {
                 if (parameter != null)
                 {
-                    Tuple<object, MetroTabItem> paramData = (Tuple<object, MetroTabItem>)parameter;
+                    var paramData = (Tuple<object, MetroTabItem>)parameter;
 
                     if (owner.CloseTabCommand != null) // TODO: let MetroTabControl define parameter to pass to command
                         owner.CloseTabCommand.Execute(null);
@@ -149,7 +149,7 @@ namespace MahApps.Metro.Controls
                     {
                         if (paramData.Item2 is MetroTabItem)
                         {
-                            var tabItem = (MetroTabItem)paramData.Item2;
+                            var tabItem = paramData.Item2;
 
                             // KIDS: don't try this at home
                             // this is not good MVVM habits and I'm only doing it
@@ -171,13 +171,10 @@ namespace MahApps.Metro.Controls
                                 if (collection == null) return;
 
                                 // find the item and kill it (I mean, remove it)
-                                foreach (var item in owner.ItemsSource)
+                                foreach (var item in owner.ItemsSource.Cast<object>().Where(item => tabItem == item || tabItem.DataContext == item))
                                 {
-                                    if (tabItem.DataContext == item)
-                                    {
-                                        collection.Remove(item);
-                                        break;
-                                    }
+                                    collection.Remove(item);
+                                    break;
                                 }
                             }
                         }
